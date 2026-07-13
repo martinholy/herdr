@@ -25,8 +25,8 @@ pub(super) fn dispatch_client_shell_actions(
                     repaint |= shell.cancel_endpoint_request(&request.id);
                 }
             }
-            shell::ClientShellAction::ClipboardWrite(bytes) => {
-                crate::selection::write_osc52_bytes(&bytes);
+            shell::ClientShellAction::ClipboardWrite { bytes, target } => {
+                crate::selection::write_clipboard_bytes(&bytes, target);
             }
             shell::ClientShellAction::ActivateEndpoint {
                 endpoint_id,
