@@ -1711,8 +1711,15 @@ impl ClientShellState {
                 .selection
                 .as_mut()
                 .is_some_and(crate::selection::Selection::finish);
-            if copied && self.config.copy_on_select {
-                self.request_selection_copy(outcome, true);
+            let copy_target = copied
+                .then(|| {
+                    crate::selection::ClipboardTarget::from_copy_on_select(
+                        self.config.copy_on_select,
+                    )
+                })
+                .flatten();
+            if let Some(target) = copy_target {
+                self.request_selection_copy(outcome, true, target);
                 self.selection = None;
             } else if self
                 .selection
