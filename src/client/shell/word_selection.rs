@@ -146,8 +146,10 @@ impl ClientShellState {
                 selection.finish();
             }
             self.word_selection_gesture = None;
-            if self.config.copy_on_select {
-                self.request_selection_copy(outcome, false);
+            if let Some(target) =
+                crate::selection::ClipboardTarget::from_copy_on_select(self.config.copy_on_select)
+            {
+                self.request_selection_copy(outcome, false, target);
                 if dragged {
                     self.selection = None;
                 } else {
