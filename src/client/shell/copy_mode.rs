@@ -841,7 +841,11 @@ impl ClientShellState {
         {
             // A visible explicit selection is live. If the fallback above supplied
             // a search match, retain the revision that established its boundaries.
-            self.request_selection_copy(outcome, live_selection);
+            self.request_selection_copy(
+                outcome,
+                live_selection,
+                crate::selection::ClipboardTarget::SYSTEM,
+            );
         }
         self.selection = None;
         self.selection_highlight_clear_deadline = None;
