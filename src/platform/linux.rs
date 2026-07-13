@@ -458,6 +458,15 @@ pub fn write_clipboard(bytes: &[u8]) -> bool {
     false
 }
 
+pub fn write_primary(bytes: &[u8]) -> bool {
+    for command in primary_clipboard_commands() {
+        if run_clipboard_command(&command, bytes) {
+            return true;
+        }
+    }
+    false
+}
+
 pub fn read_clipboard_text() -> Option<String> {
     for command in read_clipboard_text_commands() {
         if let Some(text) = read_clipboard_text_with_command(&command) {
@@ -668,6 +677,31 @@ fn clipboard_commands() -> Vec<ClipboardCommand> {
         commands.push(ClipboardCommand {
             program: "xsel",
             args: &["--clipboard", "--input"],
+        });
+    }
+
+    commands
+}
+
+/// Commands that write to the PRIMARY selection (middle-click paste buffer).
+fn primary_clipboard_commands() -> Vec<ClipboardCommand> {
+    let mut commands = Vec::new();
+
+    if std::env::var_os("WAYLAND_DISPLAY").is_some() {
+        commands.push(ClipboardCommand {
+            program: "wl-copy",
+            args: &["--primary", "--type", "text/plain;charset=utf-8"],
+        });
+    }
+
+    if std::env::var_os("DISPLAY").is_some() {
+        commands.push(ClipboardCommand {
+            program: "xclip",
+            args: &["-selection", "primary", "-in"],
+        });
+        commands.push(ClipboardCommand {
+            program: "xsel",
+            args: &["--primary", "--input"],
         });
     }
 

@@ -538,8 +538,8 @@ fn dispatch_client_shell_actions(
             shell::ClientShellAction::Endpoint { boot_id, request } => {
                 endpoint_commands.enqueue(boot_id, request);
             }
-            shell::ClientShellAction::ClipboardWrite(bytes) => {
-                crate::selection::write_osc52_bytes(&bytes);
+            shell::ClientShellAction::ClipboardWrite { bytes, target } => {
+                crate::selection::write_clipboard_bytes(&bytes, target);
             }
             shell::ClientShellAction::Request(request) => {
                 write_to_server(write_stream, &request).map_err(ClientError::ConnectionLost)?;
@@ -1937,7 +1937,7 @@ fn forward_clipboard(data: &str) -> bool {
         return false;
     };
 
-    crate::selection::write_osc52_bytes(&bytes);
+    crate::selection::write_clipboard_bytes(&bytes, crate::selection::ClipboardTarget::SYSTEM);
     true
 }
 

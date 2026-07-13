@@ -85,7 +85,7 @@ pub(crate) struct ClientShellConfig {
     pub(super) toast_delivery: crate::config::ToastDelivery,
     pub(super) toast_delay_seconds: u64,
     pub(super) toast_position: crate::config::ToastHerdrPosition,
-    pub(super) copy_on_select: bool,
+    pub(super) copy_on_select: crate::config::CopyOnSelect,
     pub(super) clipboard_toast_enabled: bool,
     pub(super) clipboard_toast_position: crate::config::ToastClipboardPosition,
     pub(super) theme_name: String,
@@ -282,7 +282,11 @@ pub(crate) enum ClientShellAction {
         boot_id: String,
         request: Box<crate::api::schema::Request>,
     },
-    ClipboardWrite(Vec<u8>),
+    /// Write `bytes` to the local clipboard buffers named by `target`.
+    ClipboardWrite {
+        bytes: Vec<u8>,
+        target: crate::selection::ClipboardTarget,
+    },
     Request(ClientMessage),
     OpenSafeWebUrl(String),
     ReplayMouse(Vec<crossterm::event::MouseEvent>),
@@ -659,6 +663,7 @@ pub(super) enum PendingEndpointKind {
     },
     SelectionCopy {
         fallback: Option<ClientMessage>,
+        target: crate::selection::ClipboardTarget,
     },
     PaneScroll {
         pane_id: String,

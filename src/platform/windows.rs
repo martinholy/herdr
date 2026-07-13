@@ -1966,6 +1966,11 @@ pub fn write_clipboard(bytes: &[u8]) -> bool {
     }
 }
 
+/// Windows has no PRIMARY selection clipboard.
+pub fn write_primary(_bytes: &[u8]) -> bool {
+    false
+}
+
 pub fn read_clipboard_text() -> Option<String> {
     None
 }

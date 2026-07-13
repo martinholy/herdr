@@ -311,7 +311,7 @@ fn client_double_click_selects_and_copies_endpoint_row_word() {
     );
     assert!(matches!(
         &actions[..],
-        [ClientShellAction::ClipboardWrite(bytes)] if bytes == b"LIVE"
+        [ClientShellAction::ClipboardWrite { bytes, .. }] if bytes == b"LIVE"
     ));
 }
 

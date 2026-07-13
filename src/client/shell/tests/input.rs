@@ -402,7 +402,7 @@ fn highlighted_search_match_copies_after_in_flight_repeat() {
     );
     assert!(matches!(
         &clipboard[..],
-        [ClientShellAction::ClipboardWrite(bytes)] if bytes == b"needle"
+        [ClientShellAction::ClipboardWrite { bytes, .. }] if bytes == b"needle"
     ));
 }
 

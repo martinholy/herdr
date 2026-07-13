@@ -244,14 +244,24 @@ impl ClientShellState {
         }
     }
 
-    pub(super) fn request_selection_copy(&mut self, outcome: &mut ClientShellInput) {
-        self.request_selection_copy_with_fallback(outcome, None);
+    /// Reads the current selection through the endpoint and writes it to the
+    /// clipboard buffers named by `target`. Explicit copies (copy mode yank,
+    /// the retained-selection copy shortcut) pass
+    /// [`crate::selection::ClipboardTarget::SYSTEM`]; automatic on-select
+    /// copies derive the target from `copy_on_select`.
+    pub(super) fn request_selection_copy(
+        &mut self,
+        outcome: &mut ClientShellInput,
+        target: crate::selection::ClipboardTarget,
+    ) {
+        self.request_selection_copy_with_fallback(outcome, None, target);
     }
 
     pub(super) fn request_selection_copy_with_fallback(
         &mut self,
         outcome: &mut ClientShellInput,
         fallback_key: Option<crate::input::TerminalKey>,
+        target: crate::selection::ClipboardTarget,
     ) {
         let Some(selection) = self.selection.as_ref() else {
             return;
@@ -299,7 +309,7 @@ impl ClientShellState {
                     content_revision,
                 },
             ),
-            PendingEndpointKind::SelectionCopy { fallback },
+            PendingEndpointKind::SelectionCopy { fallback, target },
             outcome,
         );
     }
@@ -588,7 +598,7 @@ impl ClientShellState {
                 let repaint = self.complete_pane_scroll(pane_id, serial, result, &mut outcome);
                 return (repaint, outcome.actions);
             }
-            PendingEndpointKind::SelectionCopy { fallback } => {
+            PendingEndpointKind::SelectionCopy { fallback, target } => {
                 let fallback = || {
                     fallback
                         .map(ClientShellAction::Request)
@@ -602,7 +612,10 @@ impl ClientShellState {
                         let repaint = self.show_copy_feedback(std::time::Instant::now());
                         (
                             repaint,
-                            vec![ClientShellAction::ClipboardWrite(text.into_bytes())],
+                            vec![ClientShellAction::ClipboardWrite {
+                                bytes: text.into_bytes(),
+                                target,
+                            }],
                         )
                     }
                     Ok(crate::api::schema::ResponseResult::PaneSelection { .. }) => {
@@ -663,13 +676,18 @@ impl ClientShellState {
                 self.selection = Some(selection);
                 self.selection_autoscroll = None;
                 self.selection_autoscroll_deadline = None;
-                if !self.config.copy_on_select {
+                // A double-click word copy honors the configured copy-on-select
+                // targets; when auto-copy is disabled the word stays selected
+                // until the copy shortcut.
+                let Some(target) = crate::selection::ClipboardTarget::from_copy_on_select(
+                    self.config.copy_on_select,
+                ) else {
                     return (true, Vec::new());
-                }
+                };
                 self.selection_highlight_clear_deadline =
                     Some(std::time::Instant::now() + std::time::Duration::from_millis(500));
                 let mut outcome = ClientShellInput::default();
-                self.request_selection_copy(&mut outcome);
+                self.request_selection_copy(&mut outcome, target);
                 return (true, outcome.actions);
             }
             PendingEndpointKind::PaneLinkActivate {

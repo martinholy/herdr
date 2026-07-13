@@ -142,6 +142,86 @@ pub enum SidebarCollapsedModeConfig {
     Hidden,
 }
 
+/// Whether and where a finished mouse selection is copied.
+///
+/// Accepts either a boolean or a string in config:
+/// - `false` (alias: `"disabled"`) — keep drag selection visible without
+///   copying; a double-click still copies a word.
+/// - `true` (alias: `"clipboard"`) — copy a selection to the system clipboard.
+/// - `"primary"` — copy a selection to the selection clipboard only (PRIMARY on
+///   Linux/X11/Wayland, pasted with middle-click). macOS and Windows have no
+///   selection clipboard, so this degrades to selection without auto-copy.
+/// - `"both"` — copy a selection to both the system clipboard and the
+///   selection clipboard.
+///
+/// Only the automatic on-select copy honors the target. Explicit copies (copy
+/// mode yank, OSC 52 from a pane child) always go to the system clipboard;
+/// a double-click word copy honors the target but falls back to the system
+/// clipboard when automatic copying is disabled.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum CopyOnSelect {
+    /// Automatic copy-on-select is off (`false`). Mouse selection stays
+    /// available; it is just never auto-copied.
+    Disabled,
+    /// Copy a selection to the system clipboard (`true` / `"clipboard"`).
+    #[default]
+    Clipboard,
+    /// Copy a selection to the selection clipboard only (`"primary"`).
+    Primary,
+    /// Copy a selection to both clipboards (`"both"`).
+    Both,
+}
+
+impl CopyOnSelect {
+    /// Whether a finished drag selection is auto-copied. `Primary` still
+    /// counts as enabled on platforms without a selection clipboard; the
+    /// selection simply has nowhere to be auto-copied there.
+    pub fn is_enabled(self) -> bool {
+        self != CopyOnSelect::Disabled
+    }
+}
+
+impl<'de> Deserialize<'de> for CopyOnSelect {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct CopyOnSelectVisitor;
+
+        impl de::Visitor<'_> for CopyOnSelectVisitor {
+            type Value = CopyOnSelect;
+
+            fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+                f.write_str(
+                    "a boolean or one of \"disabled\", \"clipboard\", \"primary\", \"both\"",
+                )
+            }
+
+            fn visit_bool<E: de::Error>(self, value: bool) -> Result<CopyOnSelect, E> {
+                Ok(if value {
+                    CopyOnSelect::Clipboard
+                } else {
+                    CopyOnSelect::Disabled
+                })
+            }
+
+            fn visit_str<E: de::Error>(self, value: &str) -> Result<CopyOnSelect, E> {
+                match value.trim().to_ascii_lowercase().as_str() {
+                    "disabled" => Ok(CopyOnSelect::Disabled),
+                    "clipboard" => Ok(CopyOnSelect::Clipboard),
+                    "primary" => Ok(CopyOnSelect::Primary),
+                    "both" => Ok(CopyOnSelect::Both),
+                    other => Err(de::Error::custom(format!(
+                        "copy_on_select must be a boolean or \"disabled\"/\"clipboard\"/\"primary\"/\"both\", got {other:?}"
+                    ))),
+                }
+            }
+        }
+
+        deserializer.deserialize_any(CopyOnSelectVisitor)
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct RightClickPassthroughModifierConfig(Option<KeyModifiers>);
 
@@ -860,8 +940,9 @@ pub struct UiConfig {
     pub mobile_width_threshold: u16,
     /// Capture mouse input for Herdr's mouse UI. Default: true.
     pub mouse_capture: bool,
-    /// Copy text selected with the mouse. Default: true.
-    pub copy_on_select: bool,
+    /// Copy text selected with the mouse. Boolean or "disabled"/"clipboard"/"primary"/"both".
+    /// Default: true (system clipboard).
+    pub copy_on_select: CopyOnSelect,
     /// Host cursor policy. Default: auto.
     pub host_cursor: HostCursorModeConfig,
     /// Modifier that lets right-click gestures pass through to pane apps. Empty disables it.
@@ -1107,7 +1188,7 @@ impl Default for UiConfig {
             sidebar_collapsed_mode: SidebarCollapsedModeConfig::Compact,
             mobile_width_threshold: DEFAULT_MOBILE_WIDTH_THRESHOLD,
             mouse_capture: true,
-            copy_on_select: true,
+            copy_on_select: CopyOnSelect::default(),
             host_cursor: HostCursorModeConfig::Auto,
             right_click_passthrough_modifier: RightClickPassthroughModifierConfig::default(),
             redraw_on_focus_gained: true,
@@ -1622,14 +1703,29 @@ mouse_capture = false
     #[test]
     fn copy_on_select_default_on_and_parse() {
         let default_config = Config::default();
-        assert!(default_config.ui.copy_on_select);
+        assert_eq!(default_config.ui.copy_on_select, CopyOnSelect::Clipboard);
+        assert!(default_config.ui.copy_on_select.is_enabled());
 
-        let toml = r#"
-[ui]
-copy_on_select = false
-"#;
-        let config: Config = toml::from_str(toml).unwrap();
-        assert!(!config.ui.copy_on_select);
+        let cases = [
+            ("copy_on_select = false", CopyOnSelect::Disabled),
+            ("copy_on_select = \"disabled\"", CopyOnSelect::Disabled),
+            ("copy_on_select = true", CopyOnSelect::Clipboard),
+            ("copy_on_select = \"clipboard\"", CopyOnSelect::Clipboard),
+            ("copy_on_select = \"primary\"", CopyOnSelect::Primary),
+            ("copy_on_select = \"both\"", CopyOnSelect::Both),
+        ];
+        for (line, expected) in cases {
+            let toml = format!("[ui]\n{line}\n");
+            let config: Config = toml::from_str(&toml).unwrap();
+            assert_eq!(config.ui.copy_on_select, expected, "parsing {line:?}");
+        }
+        assert!(!CopyOnSelect::Disabled.is_enabled());
+    }
+
+    #[test]
+    fn copy_on_select_rejects_unknown_string() {
+        let toml = "[ui]\ncopy_on_select = \"sometimes\"\n";
+        assert!(toml::from_str::<Config>(toml).is_err());
     }
 
     #[test]

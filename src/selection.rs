@@ -247,10 +247,15 @@ fn clamp_to_pane(screen_col: u16, screen_row: u16, pane_inner: Rect) -> (u16, u1
     (clamped_row - pane_inner.y, clamped_col - pane_inner.x)
 }
 
-fn osc52_sequence(bytes: &[u8]) -> String {
+/// Builds an OSC 52 write for a specific selection buffer.
+///
+/// The selection parameter is `c` for the system clipboard and `p` for the
+/// PRIMARY selection. Some terminals still only honor BEL-terminated OSC 52
+/// writes, so herdr emits BEL even though ST works in newer emulators.
+fn osc52_sequence_for(bytes: &[u8], selection: char) -> String {
     use base64::Engine;
     let encoded = base64::engine::general_purpose::STANDARD.encode(bytes);
-    format!("\x1b]52;c;{encoded}\x07")
+    format!("\x1b]52;{selection};{encoded}\x07")
 }
 
 fn contains_wsl_marker(value: &str) -> bool {
@@ -303,18 +308,81 @@ fn should_prefer_osc52() -> bool {
     )
 }
 
-/// Write clipboard bytes to the system clipboard via native platform tools or OSC 52.
+/// Which clipboard buffers a copy should be written to.
 ///
-/// OSC 52 format: `ESC ] 52 ; c ; <base64> BEL`
+/// On Linux/X11/Wayland the system clipboard (CLIPBOARD, pasted with Ctrl/Cmd+V)
+/// and the selection clipboard (PRIMARY, pasted with middle-click) are
+/// independent. macOS and Windows have no PRIMARY, so `primary` is a no-op there.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ClipboardTarget {
+    /// Write to the system clipboard (OSC 52 `c`).
+    pub clipboard: bool,
+    /// Write to the PRIMARY selection clipboard (OSC 52 `p`).
+    pub primary: bool,
+}
+
+impl ClipboardTarget {
+    /// Explicit copies (copy mode yank, OSC 52 from a pane child) always target
+    /// the system clipboard only.
+    pub const SYSTEM: Self = Self {
+        clipboard: true,
+        primary: false,
+    };
+
+    /// Resolves the target for an automatic on-select copy from configuration.
+    ///
+    /// Returns `None` when copy-on-select is disabled, signalling the caller to
+    /// skip the copy entirely.
+    pub fn from_copy_on_select(mode: crate::config::CopyOnSelect) -> Option<Self> {
+        match mode {
+            crate::config::CopyOnSelect::Disabled => None,
+            crate::config::CopyOnSelect::Clipboard => Some(Self::SYSTEM),
+            crate::config::CopyOnSelect::Primary => Some(Self {
+                clipboard: false,
+                primary: true,
+            }),
+            crate::config::CopyOnSelect::Both => Some(Self {
+                clipboard: true,
+                primary: true,
+            }),
+        }
+    }
+}
+
+impl Default for ClipboardTarget {
+    fn default() -> Self {
+        Self::SYSTEM
+    }
+}
+
+/// Write clipboard bytes to the requested clipboard buffers.
 ///
-/// Some terminals still only honor BEL-terminated OSC 52 writes, so herdr
-/// emits BEL here even though ST works in newer emulators.
-pub fn write_osc52_bytes(bytes: &[u8]) {
-    if !should_prefer_osc52() && crate::platform::write_clipboard(bytes) {
-        return;
+/// Each requested buffer is written natively where possible, falling back to an
+/// OSC 52 sequence (`c` for the system clipboard, `p` for PRIMARY) when native
+/// writes are unavailable or a remote/WSL session prefers OSC 52 passthrough.
+pub fn write_clipboard_bytes(bytes: &[u8], target: ClipboardTarget) {
+    if target.clipboard {
+        write_one_clipboard(bytes, false);
+    }
+    if target.primary {
+        write_one_clipboard(bytes, true);
+    }
+}
+
+fn write_one_clipboard(bytes: &[u8], primary: bool) {
+    if !should_prefer_osc52() {
+        let native_ok = if primary {
+            crate::platform::write_primary(bytes)
+        } else {
+            crate::platform::write_clipboard(bytes)
+        };
+        if native_ok {
+            return;
+        }
     }
 
-    let sequence = osc52_sequence(bytes);
+    let selection = if primary { 'p' } else { 'c' };
+    let sequence = osc52_sequence_for(bytes, selection);
     let _ = std::io::stdout().write_all(sequence.as_bytes());
     let _ = std::io::stdout().flush();
 }
@@ -333,7 +401,39 @@ mod tests {
 
     #[test]
     fn osc52_sequence_uses_bel_terminator() {
-        assert_eq!(osc52_sequence(b"hello"), "\x1b]52;c;aGVsbG8=\x07");
+        assert_eq!(osc52_sequence_for(b"hello", 'c'), "\x1b]52;c;aGVsbG8=\x07");
+    }
+
+    #[test]
+    fn osc52_sequence_uses_primary_selector() {
+        assert_eq!(osc52_sequence_for(b"hello", 'p'), "\x1b]52;p;aGVsbG8=\x07");
+    }
+
+    #[test]
+    fn clipboard_target_from_copy_on_select_maps_modes() {
+        use crate::config::CopyOnSelect;
+        assert_eq!(
+            ClipboardTarget::from_copy_on_select(CopyOnSelect::Disabled),
+            None
+        );
+        assert_eq!(
+            ClipboardTarget::from_copy_on_select(CopyOnSelect::Clipboard),
+            Some(ClipboardTarget::SYSTEM)
+        );
+        assert_eq!(
+            ClipboardTarget::from_copy_on_select(CopyOnSelect::Primary),
+            Some(ClipboardTarget {
+                clipboard: false,
+                primary: true
+            })
+        );
+        assert_eq!(
+            ClipboardTarget::from_copy_on_select(CopyOnSelect::Both),
+            Some(ClipboardTarget {
+                clipboard: true,
+                primary: true
+            })
+        );
     }
 
     #[test]
