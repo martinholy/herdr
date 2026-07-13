@@ -85,7 +85,7 @@ pub(crate) struct ClientShellConfig {
     pub(super) toast_delivery: crate::config::ToastDelivery,
     pub(super) toast_delay_seconds: u64,
     pub(super) toast_position: crate::config::ToastHerdrPosition,
-    pub(super) copy_on_select: bool,
+    pub(super) copy_on_select: crate::config::CopyOnSelect,
     pub(super) clipboard_toast_enabled: bool,
     pub(super) clipboard_toast_position: crate::config::ToastClipboardPosition,
     pub(super) theme_name: String,
@@ -297,7 +297,11 @@ pub(crate) enum ClientShellAction {
         boot_id: String,
         request: Box<crate::api::schema::Request>,
     },
-    ClipboardWrite(Vec<u8>),
+    /// Write `bytes` to the local clipboard buffers named by `target`.
+    ClipboardWrite {
+        bytes: Vec<u8>,
+        target: crate::selection::ClipboardTarget,
+    },
     OpenSafeWebUrl(String),
     ActivateEndpoint {
         endpoint_id: ClientEndpointId,
@@ -688,7 +692,9 @@ pub(super) enum PendingEndpointKind {
     WorktreeRemove {
         forced: bool,
     },
-    SelectionCopy,
+    SelectionCopy {
+        target: crate::selection::ClipboardTarget,
+    },
     PaneScroll {
         pane_id: String,
         serial: u64,
@@ -1704,7 +1710,7 @@ impl ClientShellState {
                 || previous.inner_rect.height != next.inner_rect.height
                 || previous.alternate_screen_active != next.alternate_screen_active
                 // Manual mouse selections track a live buffer range, not a content revision.
-                || (self.config.copy_on_select
+                || (self.config.copy_on_select.is_enabled()
                 && previous.content_revision != next.content_revision
                 && (!previous.content_revision.is_multiple_of(2)
                     || !next.content_revision.is_multiple_of(2)

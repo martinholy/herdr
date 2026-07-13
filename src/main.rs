@@ -253,8 +253,12 @@ const DEFAULT_CONFIG: &str = r##"# herdr configuration
 # mouse_capture = true
 
 # Automatically copy text selected with the mouse.
-# Set false to retain drag or double-click word selection until Ctrl+C,
-# or Cmd+C when the host forwards it, copies and clears it.
+# false       = retain drag or double-click word selection until Ctrl+C, or Cmd+C
+#               when the host forwards it, copies and clears it ("disabled" is an alias).
+# true        = copy to the system clipboard ("clipboard" is an alias).
+# "primary"   = copy to the selection clipboard only (PRIMARY, middle-click paste on Linux).
+# "both"      = copy to both the system clipboard and the selection clipboard.
+# macOS/Windows have no selection clipboard: "both" behaves like true and "primary" selects without copying.
 # copy_on_select = true
 
 # Host cursor policy: "auto", "native", or "drawn".

@@ -306,7 +306,11 @@ fn client_double_click_selects_and_copies_endpoint_row_word() {
         [(false, false), (false, true), (true, false), (true, true)]
     {
         let mut config = Config::default();
-        config.ui.copy_on_select = copy_on_select;
+        config.ui.copy_on_select = if copy_on_select {
+            crate::config::CopyOnSelect::Clipboard
+        } else {
+            crate::config::CopyOnSelect::Disabled
+        };
         let mut state = ClientShellState::new(ClientShellConfig::from_config(&config));
         state.set_snapshot(Box::new(snapshot()));
         state.set_pane_surface(surface());
@@ -415,7 +419,7 @@ fn client_double_click_selects_and_copies_endpoint_row_word() {
         );
         assert!(matches!(
             &actions[..],
-            [ClientShellAction::ClipboardWrite(bytes)] if bytes == b"LIVE"
+            [ClientShellAction::ClipboardWrite { bytes, .. }] if bytes == b"LIVE"
         ));
         assert!(state.tick_copy_feedback(deadline.expect("auto-copy highlight deadline")));
         assert!(state.selection.is_none());

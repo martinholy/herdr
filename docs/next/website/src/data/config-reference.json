@@ -901,9 +901,15 @@
         },
         {
           "key": "ui.copy_on_select",
-          "type": "boolean",
+          "type": "enum",
           "default": "true",
-          "description": "Automatically copy text selected by mouse drag or double-click. When disabled, Ctrl+C or a host-forwarded Cmd+C copies and clears the retained selection."
+          "description": "Automatically copy text selected by mouse drag or double-click. Booleans are accepted: true is \"clipboard\" (system clipboard) and false is \"disabled\". \"primary\" copies to the selection clipboard only (PRIMARY, middle-click paste on Linux); \"both\" copies to both clipboards. When disabled, Ctrl+C or a host-forwarded Cmd+C copies and clears the retained selection.",
+          "values": [
+            "disabled",
+            "clipboard",
+            "primary",
+            "both"
+          ]
         },
         {
           "key": "ui.host_cursor",

@@ -389,7 +389,11 @@ fn failed_selection_copy_does_not_send_terminal_input() {
         }),
     ] {
         let mut outcome = ClientShellInput::default();
-        state.request_selection_copy(&mut outcome, false);
+        state.request_selection_copy(
+            &mut outcome,
+            false,
+            crate::selection::ClipboardTarget::SYSTEM,
+        );
         let (_, actions) =
             state.handle_endpoint_result("boot-1", request_id(&outcome.actions), result);
         assert!(actions.is_empty());

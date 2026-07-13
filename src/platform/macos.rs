@@ -489,6 +489,11 @@ pub fn write_clipboard(bytes: &[u8]) -> bool {
     )
 }
 
+/// macOS has no PRIMARY selection clipboard.
+pub fn write_primary(_bytes: &[u8]) -> bool {
+    false
+}
+
 pub fn read_clipboard_text() -> Option<String> {
     const MAX_CLIPBOARD_TEXT_BYTES: usize = 1024 * 1024;
 
