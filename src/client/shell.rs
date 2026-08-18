@@ -67,7 +67,10 @@ use crate::protocol::{
 #[cfg(test)]
 use crate::raw_input::RawInputEvent;
 
-fn target_event_message(target: ClientInputTarget, event: ClientPaneInputEvent) -> ClientMessage {
+pub(crate) fn target_event_message(
+    target: ClientInputTarget,
+    event: ClientPaneInputEvent,
+) -> ClientMessage {
     match target {
         ClientInputTarget::Pane(pane_id) => ClientMessage::ClientShellPaneInput {
             pane_id,
