@@ -355,6 +355,41 @@ impl Default for ClipboardTarget {
     }
 }
 
+/// Clipboard buffer a paste reads from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PasteSource {
+    /// The selection clipboard (PRIMARY on Linux/X11/Wayland). Platforms
+    /// without one read the system clipboard instead.
+    Primary,
+    /// The system clipboard.
+    Clipboard,
+}
+
+impl PasteSource {
+    /// Resolves the buffer a middle-click paste reads from configuration.
+    ///
+    /// Returns `None` when middle-click paste is disabled.
+    pub fn from_paste_on_middle_click(mode: crate::config::PasteOnMiddleClick) -> Option<Self> {
+        match mode {
+            crate::config::PasteOnMiddleClick::Disabled => None,
+            crate::config::PasteOnMiddleClick::Primary => Some(Self::Primary),
+            crate::config::PasteOnMiddleClick::Clipboard => Some(Self::Clipboard),
+        }
+    }
+}
+
+/// Reads text from `source` on this host.
+///
+/// Returns `None` when the buffer is empty or unreachable, so the caller
+/// pastes nothing rather than silently pasting a different buffer.
+pub fn read_clipboard_text(source: PasteSource) -> Option<String> {
+    let text = match source {
+        PasteSource::Primary => crate::platform::read_primary(),
+        PasteSource::Clipboard => crate::platform::read_clipboard_text(),
+    };
+    text.filter(|text| !text.is_empty())
+}
+
 /// Write clipboard bytes to the requested clipboard buffers.
 ///
 /// Each requested buffer is written natively where possible, falling back to an
@@ -407,6 +442,23 @@ mod tests {
     #[test]
     fn osc52_sequence_uses_primary_selector() {
         assert_eq!(osc52_sequence_for(b"hello", 'p'), "\x1b]52;p;aGVsbG8=\x07");
+    }
+
+    #[test]
+    fn paste_source_from_paste_on_middle_click_maps_modes() {
+        use crate::config::PasteOnMiddleClick;
+        assert_eq!(
+            PasteSource::from_paste_on_middle_click(PasteOnMiddleClick::Disabled),
+            None
+        );
+        assert_eq!(
+            PasteSource::from_paste_on_middle_click(PasteOnMiddleClick::Primary),
+            Some(PasteSource::Primary)
+        );
+        assert_eq!(
+            PasteSource::from_paste_on_middle_click(PasteOnMiddleClick::Clipboard),
+            Some(PasteSource::Clipboard)
+        );
     }
 
     #[test]
