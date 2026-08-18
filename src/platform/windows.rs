@@ -1971,6 +1971,12 @@ pub fn write_primary(_bytes: &[u8]) -> bool {
     false
 }
 
+/// Windows has no PRIMARY selection clipboard, so a middle-click paste asking
+/// for it reads the system clipboard instead.
+pub fn read_primary() -> Option<String> {
+    read_clipboard_text()
+}
+
 pub fn read_clipboard_text() -> Option<String> {
     None
 }

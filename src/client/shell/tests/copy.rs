@@ -211,6 +211,92 @@ fn copy_on_select_targets_configured_clipboard_buffers() {
     }
 }
 
+fn middle_click(state: &mut ClientShellState) -> ClientShellInput {
+    let pane = state.hits.panes[0].clone();
+    state.handle_raw_events(vec![RawInputEvent::Mouse(crossterm::event::MouseEvent {
+        kind: MouseEventKind::Down(MouseButton::Middle),
+        column: pane.inner_rect.x,
+        row: pane.inner_rect.y,
+        modifiers: KeyModifiers::empty(),
+    })])
+}
+
+fn paste_source(outcome: &ClientShellInput) -> Option<crate::selection::PasteSource> {
+    outcome.actions.iter().find_map(|action| match action {
+        ClientShellAction::PasteClipboard { target, source } => {
+            assert!(matches!(target, ClientInputTarget::Pane(pane_id) if pane_id == "pane_1"));
+            Some(*source)
+        }
+        _ => None,
+    })
+}
+
+#[test]
+fn middle_click_paste_targets_configured_clipboard() {
+    let mut state = ClientShellState::new(ClientShellConfig::from_config(&Config::default()));
+    state.set_snapshot(Box::new(snapshot()));
+    state.set_pane_surface(surface());
+    state.compose(106, 20).expect("composed frame");
+
+    state.config.paste_on_middle_click = crate::config::PasteOnMiddleClick::Disabled;
+    let outcome = middle_click(&mut state);
+    assert_eq!(paste_source(&outcome), None);
+    assert!(outcome.actions.is_empty());
+    assert!(outcome.requests.is_empty());
+
+    state.config.paste_on_middle_click = crate::config::PasteOnMiddleClick::Primary;
+    let outcome = middle_click(&mut state);
+    assert_eq!(
+        paste_source(&outcome),
+        Some(crate::selection::PasteSource::Primary)
+    );
+    assert!(
+        outcome.actions.iter().any(|action| matches!(
+            action,
+            ClientShellAction::Endpoint { request, .. }
+                if matches!(
+                    &request.method,
+                    crate::api::schema::Method::PaneFocus(target) if target.pane_id == "pane_1"
+                )
+        )),
+        "middle-click paste should focus the pane it pastes into"
+    );
+
+    state.config.paste_on_middle_click = crate::config::PasteOnMiddleClick::Clipboard;
+    let outcome = middle_click(&mut state);
+    assert_eq!(
+        paste_source(&outcome),
+        Some(crate::selection::PasteSource::Clipboard)
+    );
+}
+
+#[test]
+fn middle_click_paste_defers_to_pane_apps_that_report_mouse() {
+    let mut state = ClientShellState::new(ClientShellConfig::from_config(&Config::default()));
+    state.config.paste_on_middle_click = crate::config::PasteOnMiddleClick::Primary;
+    state.set_snapshot(Box::new(snapshot()));
+    let mut pane_surface = surface();
+    pane_surface.panes[0].mouse_reporting = true;
+    state.set_pane_surface(pane_surface);
+    state.compose(106, 20).expect("composed frame");
+
+    let outcome = middle_click(&mut state);
+    assert_eq!(paste_source(&outcome), None);
+    let [ClientMessage::ClientShellPaneInput { pane_id, events }] = &outcome.requests[..] else {
+        panic!("middle-click should be forwarded to the mouse-reporting pane app");
+    };
+    assert_eq!(pane_id, "pane_1");
+    assert!(matches!(
+        &events[..],
+        [ClientPaneInputEvent::Mouse {
+            kind: crate::protocol::ClientMouseKind::Down(
+                crate::protocol::ClientMouseButton::Middle
+            ),
+            ..
+        }]
+    ));
+}
+
 #[test]
 fn clipboard_feedback_is_client_local_and_respects_config() {
     let mut state = ClientShellState::new(ClientShellConfig::from_config(&Config::default()));

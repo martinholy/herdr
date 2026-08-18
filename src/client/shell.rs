@@ -71,7 +71,10 @@ fn delete_overlay_word(rename: &mut ClientRenameOverlay) {
     }
 }
 
-fn target_event_message(target: ClientInputTarget, event: ClientPaneInputEvent) -> ClientMessage {
+pub(crate) fn target_event_message(
+    target: ClientInputTarget,
+    event: ClientPaneInputEvent,
+) -> ClientMessage {
     match target {
         ClientInputTarget::Pane(pane_id) => ClientMessage::ClientShellPaneInput {
             pane_id,

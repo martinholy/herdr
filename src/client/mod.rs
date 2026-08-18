@@ -541,6 +541,17 @@ fn dispatch_client_shell_actions(
             shell::ClientShellAction::ClipboardWrite { bytes, target } => {
                 crate::selection::write_clipboard_bytes(&bytes, target);
             }
+            shell::ClientShellAction::PasteClipboard { target, source } => {
+                // The clipboard is read here, on the host that owns the mouse,
+                // so a remote client pastes its own selection buffer.
+                if let Some(text) = crate::selection::read_clipboard_text(source) {
+                    let request = shell::target_event_message(
+                        target,
+                        protocol::ClientPaneInputEvent::Paste(text),
+                    );
+                    write_to_server(write_stream, &request).map_err(ClientError::ConnectionLost)?;
+                }
+            }
             shell::ClientShellAction::Request(request) => {
                 write_to_server(write_stream, &request).map_err(ClientError::ConnectionLost)?;
             }

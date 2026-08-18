@@ -217,6 +217,11 @@ pub fn write_primary(_bytes: &[u8]) -> bool {
 }
 
 /// Unsupported platform stub.
+pub fn read_primary() -> Option<String> {
+    None
+}
+
+/// Unsupported platform stub.
 pub fn read_clipboard_text() -> Option<String> {
     None
 }

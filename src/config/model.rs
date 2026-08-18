@@ -222,6 +222,68 @@ impl<'de> Deserialize<'de> for CopyOnSelect {
     }
 }
 
+/// Whether a middle-click inside a pane pastes, and which clipboard it reads.
+///
+/// Accepts either a boolean or a string in config:
+/// - `false` (alias: `"disabled"`) — middle-click is never turned into a paste.
+/// - `true` (alias: `"primary"`) — paste the selection clipboard (PRIMARY on
+///   Linux/X11/Wayland). macOS and Windows have no selection clipboard, so this
+///   reads the system clipboard there instead.
+/// - `"clipboard"` — paste the system clipboard on every platform.
+///
+/// Herdr captures the mouse, so the host terminal never performs its own
+/// middle-click paste while Herdr runs. This setting is what restores it. A
+/// pane app that requested mouse reporting keeps receiving the middle-click
+/// instead; pasting into it would swallow an event the app asked for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum PasteOnMiddleClick {
+    /// Middle-click paste is off (`false`). This is the default.
+    #[default]
+    Disabled,
+    /// Paste the selection clipboard (`true` / `"primary"`).
+    Primary,
+    /// Paste the system clipboard (`"clipboard"`).
+    Clipboard,
+}
+
+impl<'de> Deserialize<'de> for PasteOnMiddleClick {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct PasteOnMiddleClickVisitor;
+
+        impl de::Visitor<'_> for PasteOnMiddleClickVisitor {
+            type Value = PasteOnMiddleClick;
+
+            fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+                f.write_str("a boolean or one of \"disabled\", \"primary\", \"clipboard\"")
+            }
+
+            fn visit_bool<E: de::Error>(self, value: bool) -> Result<PasteOnMiddleClick, E> {
+                Ok(if value {
+                    PasteOnMiddleClick::Primary
+                } else {
+                    PasteOnMiddleClick::Disabled
+                })
+            }
+
+            fn visit_str<E: de::Error>(self, value: &str) -> Result<PasteOnMiddleClick, E> {
+                match value.trim().to_ascii_lowercase().as_str() {
+                    "disabled" => Ok(PasteOnMiddleClick::Disabled),
+                    "primary" => Ok(PasteOnMiddleClick::Primary),
+                    "clipboard" => Ok(PasteOnMiddleClick::Clipboard),
+                    other => Err(de::Error::custom(format!(
+                        "paste_on_middle_click must be a boolean or \"disabled\"/\"primary\"/\"clipboard\", got {other:?}"
+                    ))),
+                }
+            }
+        }
+
+        deserializer.deserialize_any(PasteOnMiddleClickVisitor)
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct RightClickPassthroughModifierConfig(Option<KeyModifiers>);
 
@@ -943,6 +1005,9 @@ pub struct UiConfig {
     /// Copy text selected with the mouse. Boolean or "disabled"/"clipboard"/"primary"/"both".
     /// Default: true (system clipboard).
     pub copy_on_select: CopyOnSelect,
+    /// Paste on middle-click inside a pane. Boolean or "disabled"/"primary"/"clipboard".
+    /// Default: false.
+    pub paste_on_middle_click: PasteOnMiddleClick,
     /// Host cursor policy. Default: auto.
     pub host_cursor: HostCursorModeConfig,
     /// Modifier that lets right-click gestures pass through to pane apps. Empty disables it.
@@ -1189,6 +1254,7 @@ impl Default for UiConfig {
             mobile_width_threshold: DEFAULT_MOBILE_WIDTH_THRESHOLD,
             mouse_capture: true,
             copy_on_select: CopyOnSelect::default(),
+            paste_on_middle_click: PasteOnMiddleClick::default(),
             host_cursor: HostCursorModeConfig::Auto,
             right_click_passthrough_modifier: RightClickPassthroughModifierConfig::default(),
             redraw_on_focus_gained: true,
@@ -1725,6 +1791,49 @@ mouse_capture = false
     #[test]
     fn copy_on_select_rejects_unknown_string() {
         let toml = "[ui]\ncopy_on_select = \"sometimes\"\n";
+        assert!(toml::from_str::<Config>(toml).is_err());
+    }
+
+    #[test]
+    fn paste_on_middle_click_defaults_off_and_parses() {
+        let default_config = Config::default();
+        assert_eq!(
+            default_config.ui.paste_on_middle_click,
+            PasteOnMiddleClick::Disabled
+        );
+
+        let cases = [
+            (
+                "paste_on_middle_click = false",
+                PasteOnMiddleClick::Disabled,
+            ),
+            (
+                "paste_on_middle_click = \"disabled\"",
+                PasteOnMiddleClick::Disabled,
+            ),
+            ("paste_on_middle_click = true", PasteOnMiddleClick::Primary),
+            (
+                "paste_on_middle_click = \"primary\"",
+                PasteOnMiddleClick::Primary,
+            ),
+            (
+                "paste_on_middle_click = \"clipboard\"",
+                PasteOnMiddleClick::Clipboard,
+            ),
+        ];
+        for (line, expected) in cases {
+            let toml = format!("[ui]\n{line}\n");
+            let config: Config = toml::from_str(&toml).unwrap();
+            assert_eq!(
+                config.ui.paste_on_middle_click, expected,
+                "parsing {line:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn paste_on_middle_click_rejects_unknown_string() {
+        let toml = "[ui]\npaste_on_middle_click = \"both\"\n";
         assert!(toml::from_str::<Config>(toml).is_err());
     }
 

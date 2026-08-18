@@ -261,6 +261,15 @@ const DEFAULT_CONFIG: &str = r##"# herdr configuration
 # macOS/Windows have no selection clipboard: "both" behaves like true and "primary" selects without copying.
 # copy_on_select = true
 
+# Paste on middle-click inside a pane.
+# Herdr captures the mouse, so the host terminal never performs its own middle-click paste while Herdr runs.
+# false       = middle-click never pastes ("disabled" is an alias).
+# true        = paste the selection clipboard ("primary" is an alias; PRIMARY on Linux).
+# "clipboard" = paste the system clipboard.
+# macOS/Windows have no selection clipboard, so "primary" reads the system clipboard there.
+# Pane apps that request mouse reporting keep receiving the middle-click instead of pasting.
+# paste_on_middle_click = false
+
 # Host cursor policy: "auto", "native", or "drawn".
 # "auto" draws Herdr's own cursor on native Windows builds and WSL to avoid ConPTY cursor flicker, and uses the native terminal cursor elsewhere.
 # "native" always uses the outer terminal cursor. "drawn" always draws Herdr's cursor as terminal cell content.
