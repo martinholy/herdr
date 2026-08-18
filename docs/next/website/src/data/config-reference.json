@@ -912,6 +912,17 @@
           ]
         },
         {
+          "key": "ui.paste_on_middle_click",
+          "type": "enum",
+          "default": "false",
+          "description": "Paste into the pane under the cursor on middle-click. Herdr captures the mouse, so the host terminal never performs its own middle-click paste while Herdr runs. Booleans are accepted: true is \"primary\" (the selection clipboard, PRIMARY on Linux) and false is \"disabled\". \"clipboard\" pastes the system clipboard. macOS and Windows have no selection clipboard, so \"primary\" reads the system clipboard there. Pane apps that requested mouse reporting keep receiving the middle-click instead of pasting.",
+          "values": [
+            "disabled",
+            "primary",
+            "clipboard"
+          ]
+        },
+        {
           "key": "ui.host_cursor",
           "type": "enum",
           "default": "auto",
